@@ -59,6 +59,7 @@
 #include "dev/button-sensor.h"
 #include "dev/pir-sensor.h"
 #include "dev/vib-sensor.h"
+#include "dev/dir.h"
 
 #include "sys/node-id.h"
 
@@ -115,9 +116,10 @@ SIM_INTERFACE_NAME(button_interface);
 SIM_INTERFACE_NAME(pir_interface);
 SIM_INTERFACE_NAME(clock_interface);
 SIM_INTERFACE_NAME(leds_interface);
+SIM_INTERFACE_NAME(dir_interface);
 SIM_INTERFACE_NAME(cfs_interface);
 SIM_INTERFACE_NAME(eeprom_interface);
-SIM_INTERFACES(&vib_interface, &moteid_interface, &rs232_interface, &simlog_interface, &beep_interface, &radio_interface, &button_interface, &pir_interface, &clock_interface, &leds_interface, &cfs_interface, &eeprom_interface);
+SIM_INTERFACES(&vib_interface, &moteid_interface, &rs232_interface, &simlog_interface, &beep_interface, &radio_interface, &button_interface, &pir_interface, &clock_interface, &leds_interface, &dir_interface, &cfs_interface, &eeprom_interface);
 /* Example: manually add mote interfaces */
 //SIM_INTERFACE_NAME(dummy_interface);
 //SIM_INTERFACES(..., &dummy_interface);

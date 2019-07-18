@@ -64,6 +64,7 @@ import org.contikios.cooja.interfaces.LED;
 import org.contikios.cooja.interfaces.Log;
 import org.contikios.cooja.interfaces.PIR;
 import org.contikios.cooja.interfaces.Position;
+import org.contikios.cooja.interfaces.Direction;
 import org.contikios.cooja.interfaces.Radio;
 
 /**
@@ -179,6 +180,7 @@ public class EventListener extends VisPlugin {
     allInterfacesDups.add(Log.class);
     allInterfacesDups.add(PIR.class);
     allInterfacesDups.add(Position.class);
+    allInterfacesDups.add(Direction.class);
     allInterfacesDups.add(Radio.class);
 
     for (MoteType moteType : simulationToControl.getMoteTypes()) {

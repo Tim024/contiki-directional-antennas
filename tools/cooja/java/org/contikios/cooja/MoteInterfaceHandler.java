@@ -63,6 +63,7 @@ public class MoteInterfaceHandler {
   private MoteID myMoteID;
   private PIR myPIR;
   private Position myPosition;
+  private Direction myDirection;
   private Radio myRadio;
   private PolledBeforeActiveTicks[] polledBeforeActive = null;
   private PolledAfterActiveTicks[] polledAfterActive = null;
@@ -84,11 +85,14 @@ public class MoteInterfaceHandler {
   public MoteInterfaceHandler(Mote mote, Class<? extends MoteInterface>[] interfaceClasses) {
     for (Class<? extends MoteInterface> interfaceClass : interfaceClasses) {
       MoteInterface intf = MoteInterface.generateInterface(interfaceClass, mote);
-
+      
+      System.err.println("Looking to load "+interfaceClass);
       if (intf != null) {
         addInterface(intf);
+        System.err.println("Success.");
       } else {
         logger.fatal("Could not load interface: " + interfaceClass);
+        System.err.println("Fail.");
       }
     }
   }
@@ -257,6 +261,18 @@ public class MoteInterfaceHandler {
       myPosition = getInterfaceOfType(Position.class);
     }
     return myPosition;
+  }
+  
+    /**
+   * Returns the direction interface (if any).
+   *
+   * @return Direction interface
+   */
+  public Direction getDirection() {
+    if (myDirection == null) {
+      myDirection = getInterfaceOfType(Direction.class);
+    }
+    return myDirection;
   }
 
   /**

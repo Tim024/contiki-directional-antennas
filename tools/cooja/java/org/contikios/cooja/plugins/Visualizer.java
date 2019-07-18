@@ -75,6 +75,7 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 
+import javax.swing.JOptionPane;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
@@ -110,6 +111,7 @@ import org.contikios.cooja.SupportedArguments;
 import org.contikios.cooja.VisPlugin;
 import org.contikios.cooja.interfaces.LED;
 import org.contikios.cooja.interfaces.Position;
+import org.contikios.cooja.interfaces.Direction;
 import org.contikios.cooja.interfaces.SerialPort;
 import org.contikios.cooja.plugins.skins.AddressVisualizerSkin;
 import org.contikios.cooja.plugins.skins.AttributeVisualizerSkin;
@@ -555,6 +557,8 @@ public class Visualizer extends VisPlugin implements HasQuickHelp {
     });
 
     /* Register mote menu actions */
+    registerMoteMenuAction(SetDirectionMoteMenuAction.class);
+    registerMoteMenuAction(SelectAntennaMoteMenuAction.class);
     registerMoteMenuAction(ButtonClickMoteMenuAction.class);
     registerMoteMenuAction(ShowLEDMoteMenuAction.class);
     registerMoteMenuAction(ShowSerialMoteMenuAction.class);
@@ -1308,7 +1312,8 @@ public class Visualizer extends VisPlugin implements HasQuickHelp {
       }
 
       if (getSelectedMotes().contains(mote)) {
-        /* If mote is selected, highlight with red circle
+      
+      /* If mote is selected, highlight with red circle
          and semitransparent gray overlay */
         g.setColor(new Color(51, 102, 255));
         g.drawOval(x - MOTE_RADIUS, y - MOTE_RADIUS, 2 * MOTE_RADIUS,
@@ -1318,7 +1323,29 @@ public class Visualizer extends VisPlugin implements HasQuickHelp {
         g.setColor(new Color(128, 128, 128, 128));
         g.fillOval(x - MOTE_RADIUS, y - MOTE_RADIUS, 2 * MOTE_RADIUS,
                    2 * MOTE_RADIUS);
-      } else {
+      
+        /* Add vizualizer if direcional */
+        boolean omni = mote.getInterfaces().getDirection().getAntennaType();
+        if (!omni) {
+            double orientation = mote.getInterfaces().getDirection().getOrientation();
+            double bw = mote.getInterfaces().getDirection().getBeamWidth();
+            //System.err.println("Selected mote is directional. ORI: "+orientation);
+            g.setColor(new Color(11, 11, 255));
+	        double r = 50.0;
+	        double t1 = ((orientation-bw/2)*Math.PI)/180.0;
+            int xdir1 = (int)Math.round(r*Math.cos(t1));
+		    int ydir1 = (int)Math.round(r*Math.sin(t1));
+	        double t2 = ((orientation+bw/2)*Math.PI)/180.0;
+            int xdir2 = (int)Math.round(r*Math.cos(t2));
+		    int ydir2 = (int)Math.round(r*Math.sin(t2));
+		    
+	        g.drawLine(x,y,x+xdir1,y+ydir1);
+	        g.drawLine(x,y,x+xdir2,y+ydir2);
+        } else {
+            System.err.println("Selected mote is omni.");
+        }
+        
+    } else {
         g.setColor(Color.BLACK);
         g.drawOval(x - MOTE_RADIUS, y - MOTE_RADIUS, 2 * MOTE_RADIUS,
                    2 * MOTE_RADIUS);
@@ -1651,6 +1678,46 @@ public class Visualizer extends VisPlugin implements HasQuickHelp {
         sb.append(skin.getClass().getName());
       }
       Cooja.setExternalToolsSetting("VISUALIZER_DEFAULT_SKINS", sb.toString());
+    }
+  };
+  
+  protected static class SetDirectionMoteMenuAction implements MoteMenuAction {
+
+    @Override
+    public boolean isEnabled(Visualizer visualizer, Mote mote) {
+      return true;
+    }
+
+    @Override
+    public String getDescription(Visualizer visualizer, Mote mote) {
+      return "Set " + mote + " Direction";
+    }
+
+    @Override
+    public void doAction(Visualizer visualizer, Mote mote) {
+	    String number = JOptionPane.showInputDialog("Enter value of orientation in degrees");
+	    double value = Double.parseDouble(number);
+        mote.getInterfaces().getDirection().setOrientation(value);
+    }
+  };
+
+  protected static class SelectAntennaMoteMenuAction implements MoteMenuAction {
+
+    @Override
+    public boolean isEnabled(Visualizer visualizer, Mote mote) {
+      return true;
+    }
+
+    @Override
+    public String getDescription(Visualizer visualizer, Mote mote) {
+      return "Select Antenna type for " + mote;
+    }
+
+    @Override
+    public void doAction(Visualizer visualizer, Mote mote) {
+	    String number = JOptionPane.showInputDialog("Select antenna (0-Omni, 1-Directional)");
+	    int value = Integer.parseInt(number);
+	    mote.getInterfaces().getDirection().setAntennaType(value);
     }
   };
 

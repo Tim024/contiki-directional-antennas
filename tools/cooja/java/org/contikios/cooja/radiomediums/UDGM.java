@@ -41,13 +41,21 @@ import org.jdom.Element;
 
 import org.contikios.cooja.ClassDescription;
 import org.contikios.cooja.Mote;
+import org.contikios.cooja.MoteInterface;
 import org.contikios.cooja.RadioConnection;
 import org.contikios.cooja.SimEventCentral.MoteCountListener;
 import org.contikios.cooja.Simulation;
+import org.contikios.cooja.interfaces.MoteID;
 import org.contikios.cooja.interfaces.Position;
+import org.contikios.cooja.interfaces.Direction;
 import org.contikios.cooja.interfaces.Radio;
 import org.contikios.cooja.plugins.Visualizer;
 import org.contikios.cooja.plugins.skins.UDGMVisualizerSkin;
+
+import java.io.*;
+import java.util.*;
+import java.lang.Double;
+
 
 /**
  * The Unit Disk Graph Radio Medium abstracts radio transmission range as circles.
@@ -86,10 +94,18 @@ public class UDGM extends AbstractRadioMedium {
   public double SUCCESS_RATIO_RX = 1.0; /* Success ratio of RX. If this fails, the single affected receiver does not receive the packet */
   public double TRANSMITTING_RANGE = 50; /* Transmission range. */
   public double INTERFERENCE_RANGE = 100; /* Interference range. Ignored if below transmission range. */
+  public double RX_SENS = -95;
+  public double INTF_TH = -100;
+  private double freq = 2.4;
+  private double c_speed = 299792458;
 
   private DirectedGraphMedium dgrm; /* Used only for efficient destination lookup */
 
   private Random random = null;
+  int nodeid = 0;
+  long clock = 0;
+  private Mote mote = null;
+  //double s_ori = 0;
 
   public UDGM(Simulation simulation) {
     super(simulation);
@@ -101,14 +117,16 @@ public class UDGM extends AbstractRadioMedium {
         clearEdges();
         for (Radio source: UDGM.this.getRegisteredRadios()) {
           Position sourcePos = source.getPosition();
+	  Direction sourceDir = source.getDirection();
           for (Radio dest: UDGM.this.getRegisteredRadios()) {
             Position destPos = dest.getPosition();
+            Direction destDir = dest.getDirection();
             /* Ignore ourselves */
             if (source == dest) {
               continue;
             }
-            double distance = sourcePos.getDistanceTo(destPos);
-            if (distance < Math.max(TRANSMITTING_RANGE, INTERFERENCE_RANGE)) {
+            double distance = sourcePos.getDistanceTo(destPos);		// Add direction as parameter along with distance
+            if (distance < Math.max(TRANSMITTING_RANGE, INTERFERENCE_RANGE)) {	//Add Antenna effects here
               /* Add potential destination */
               addEdge(
                   new DirectedGraphMedium.Edge(source, 
@@ -130,7 +148,10 @@ public class UDGM extends AbstractRadioMedium {
     /* Re-analyze potential receivers if radios are added/removed. */
     simulation.getEventCentral().addMoteCountListener(new MoteCountListener() {
       public void moteWasAdded(Mote mote) {
-        mote.getInterfaces().getPosition().addObserver(positionObserver);
+	UDGM.this.mote = mote;
+        UDGM.this.mote.getInterfaces().getPosition().addObserver(positionObserver);
+  	nodeid = UDGM.this.mote.getInterfaces().getMoteID().getMoteID();
+	clock = UDGM.this.mote.getInterfaces().getClock().getTime();
         dgrm.requestEdgeAnalysis();
       }
       public void moteWasRemoved(Mote mote) {
@@ -216,12 +237,20 @@ public class UDGM extends AbstractRadioMedium {
 //          continue;
 //        }
 //      }
-
-      double distance = senderPos.getDistanceTo(recvPos);
-      if (distance <= moteTransmissionRange) {
+	
+	double PL = 0.0;
+      	double distance = senderPos.getDistanceTo(recvPos);
+	double Ptx = sender.getCurrentOutputPower();
+	double Gtx = 20*Math.log10(sender.getDirection().getGain(recv.getPosition()));
+	double Grx = 20*Math.log10(recv.getDirection().getGain(sender.getPosition()));
+	
+	 PL = 20*Math.log10(distance) + 20*Math.log10(freq) + 180 + 20*Math.log10(4*Math.PI/c_speed);
+	
+        double signalStrength = Ptx + Gtx + Grx - PL;
+      if (signalStrength >= RX_SENS) {	//(distance <= moteTransmissionRange) //Add antenna effects here
         /* Within transmission range */
 
-        if (!recv.isRadioOn()) {
+        if (!recv.isRadioOn()) {	//In case radio turned ON later(?), interferes reception
           newConnection.addInterfered(recv);
           recv.interfereAnyReception();
         } else if (recv.isInterfered()) {
@@ -229,15 +258,14 @@ public class UDGM extends AbstractRadioMedium {
           newConnection.addInterfered(recv);
         } else if (recv.isTransmitting()) {
           newConnection.addInterfered(recv);
-        } else if (recv.isReceiving() ||
-            (random.nextDouble() > getRxSuccessProbability(sender, recv))) {
+        } else if (recv.isReceiving()) { // || (random.nextDouble() > getRxSuccessProbability(sender, recv))) {	//Randomly interfere(add to intf), i.e. randomly fail tx/rx
           /* Was receiving, or reception failed: start interfering */
           newConnection.addInterfered(recv);
           recv.interfereAnyReception();
 
           /* Interfere receiver in all other active radio connections */
           for (RadioConnection conn : getActiveConnections()) {
-            if (conn.isDestination(recv)) {
+            if (conn.isDestination(recv)) {	// v/s recv.isReceiving()??? What is active radio connection?
               conn.addInterfered(recv);
             }
           }
@@ -246,7 +274,7 @@ public class UDGM extends AbstractRadioMedium {
           /* Success: radio starts receiving */
           newConnection.addDestination(recv);
         }
-      } else if (distance <= moteInterferenceRange) {
+      } else if (signalStrength >= INTF_TH && signalStrength < RX_SENS) {	//Add antenna effects here
         /* Within interference range */
         newConnection.addInterfered(recv);
         recv.interfereAnyReception();
@@ -262,7 +290,7 @@ public class UDGM extends AbstractRadioMedium {
   public double getTxSuccessProbability(Radio source) {
     return SUCCESS_RATIO_TX;
   }
-  public double getRxSuccessProbability(Radio source, Radio dest) {
+  public double getRxSuccessProbability(Radio source, Radio dest) {	//Add antenna effects here
   	double distance = source.getPosition().getDistanceTo(dest.getPosition());
     double distanceSquared = Math.pow(distance,2.0);
     double distanceMax = TRANSMITTING_RANGE * 
@@ -289,7 +317,7 @@ public class UDGM extends AbstractRadioMedium {
     /* Set signal strength to below strong on destinations */
     RadioConnection[] conns = getActiveConnections();
     for (RadioConnection conn : conns) {
-      if (conn.getSource().getCurrentSignalStrength() < SS_STRONG) {
+      if (conn.getSource().getCurrentSignalStrength() < SS_STRONG) {	//Source Signal Strength???
         conn.getSource().setCurrentSignalStrength(SS_STRONG);
       }
       for (Radio dstRadio : conn.getDestinations()) {
@@ -298,14 +326,37 @@ public class UDGM extends AbstractRadioMedium {
             conn.getSource().getChannel() != dstRadio.getChannel()) {
           continue;
         }
-
+	
+	double PL =0.0;
         double dist = conn.getSource().getPosition().getDistanceTo(dstRadio.getPosition());
+	double xk = conn.getSource().getPosition().getXCoordinate(); //src X co-ordinate
+	double yk = conn.getSource().getPosition().getYCoordinate(); //src Y co-ordinate
+	double xd = dstRadio.getPosition().getXCoordinate(); //Actual dest X co-ordinate
+	double yd = dstRadio.getPosition().getYCoordinate(); //Actual dest Y co-ordinate 
+	double sender_orientation = conn.getSource().getDirection().getOrientation(); //src node orientation 
+	double recv_orientation = dstRadio.getDirection().getOrientation(); //dst node orientation
 
         double maxTxDist = TRANSMITTING_RANGE
         * ((double) conn.getSource().getCurrentOutputPowerIndicator() / (double) conn.getSource().getOutputPowerIndicatorMax());
-        double distFactor = dist/maxTxDist;
+        double distFactor = dist/maxTxDist;	// dst Radio dist : maxTxDist
 
-        double signalStrength = SS_STRONG + distFactor*(SS_WEAK - SS_STRONG);
+	double Ptx = conn.getSource().getCurrentOutputPower();
+	double Gtx = 20*Math.log10(conn.getSource().getDirection().getGain(dstRadio.getPosition()));
+	double Grx = 20*Math.log10(dstRadio.getDirection().getGain(conn.getSource().getPosition()));
+	if(dist >= TRANSMITTING_RANGE)
+	{
+	 PL = 20*Math.log10(dist)*distFactor + 20*Math.log10(freq) + 155 + 20*Math.log10(4*Math.PI/c_speed)+0.37*dist;
+	}
+	else
+	{
+	 PL = 20*Math.log10(dist)*distFactor + 20*Math.log10(freq) + 155 + 20*Math.log10(4*Math.PI/c_speed)+0.22*dist; //2.4GHz: 20*log(2.4) + 20*log(10^9)
+	}	 
+	//205 highest PL factor for -95dBm & 155 lowest PL factor for -10dBm
+        double signalStrength = Ptx + Gtx + Grx - PL;		
+
+	double ori_radians = Math.toRadians(recv_orientation); //convert degree to radians to be passed as argument for cos & sin functions
+
+	
         if (dstRadio.getCurrentSignalStrength() < signalStrength) {
           dstRadio.setCurrentSignalStrength(signalStrength);
         }
@@ -313,33 +364,48 @@ public class UDGM extends AbstractRadioMedium {
     }
 
     /* Set signal strength to below weak on interfered */
-    for (RadioConnection conn : conns) {
+    for (RadioConnection conn : conns) {	//conns = getActiveConnections();
       for (Radio intfRadio : conn.getInterfered()) {
         if (conn.getSource().getChannel() >= 0 &&
             intfRadio.getChannel() >= 0 &&
             conn.getSource().getChannel() != intfRadio.getChannel()) {
           continue;
         }
-
+	double PL = 0.0;
         double dist = conn.getSource().getPosition().getDistanceTo(intfRadio.getPosition());
 
         double maxTxDist = TRANSMITTING_RANGE
         * ((double) conn.getSource().getCurrentOutputPowerIndicator() / (double) conn.getSource().getOutputPowerIndicatorMax());
-        double distFactor = dist/maxTxDist;
+        double distFactor = dist/maxTxDist;	//intf radio dist : maxTxDist
 
-        if (distFactor < 1) {
-          double signalStrength = SS_STRONG + distFactor*(SS_WEAK - SS_STRONG);
-          if (intfRadio.getCurrentSignalStrength() < signalStrength) {
-            intfRadio.setCurrentSignalStrength(signalStrength);
-          }
-        } else {
-          intfRadio.setCurrentSignalStrength(SS_WEAK);
-          if (intfRadio.getCurrentSignalStrength() < SS_WEAK) {
-            intfRadio.setCurrentSignalStrength(SS_WEAK);
-          }
-        }
+	double Ptx = conn.getSource().getCurrentOutputPower();
+	double Gtx = 20*Math.log10(conn.getSource().getDirection().getGain(intfRadio.getPosition()));	//intfRadio instead of dstRadio
+	double Grx = 20*Math.log10(intfRadio.getDirection().getGain(conn.getSource().getPosition()));	//intfRadio instead of dstRadio
+	if(dist >= TRANSMITTING_RANGE)
+	{
+	 PL = 20*Math.log10(dist)*distFactor + 20*Math.log10(freq) + 155 + 20*Math.log10(4*Math.PI/c_speed)+0.37*dist;
+	}
+	else
+	{
+	 PL = 20*Math.log10(dist)*distFactor + 20*Math.log10(freq) + 155 + 20*Math.log10(4*Math.PI/c_speed)+0.22*dist; //2.4GHz: 20*log(2.4) + 20*log(10^9)
+	}	
+	
+	// PL = 20*Math.log10(dist)*distFactor + 20*Math.log10(freq) + 155 + 20*Math.log10(4*Math.PI/c_speed)+0.22*dist; //2.4GHz: 20*log(2.4) + 20*log(10^9)
+        double signalStrength = Ptx + Gtx + Grx - PL; //SS_STRONG + distFactor*(SS_WEAK - SS_STRONG);	//Add antenna effects here
 
-        if (!intfRadio.isInterfered()) {
+        //if (distFactor < 1) {	// intf radio within Tx range
+	//signalStrength defined here initially
+          //if (intfRadio.getCurrentSignalStrength() < signalStrength) {
+            //intfRadio.setCurrentSignalStrength(signalStrength);	//But intfRadio can't receive???
+          //}
+        //} else {
+          intfRadio.setCurrentSignalStrength(SS_WEAK);	//signalStrength always WEAK beyond maxTxDist for intfRadio
+          //if (intfRadio.getCurrentSignalStrength() < SS_WEAK) {	//--> signalStrength < SS_WEAK???
+            //intfRadio.setCurrentSignalStrength(SS_WEAK);	//???
+          //}
+        //}
+
+        if (!intfRadio.isInterfered()) {	// But intfRadio : conn.getInterfered()???
           /*logger.warn("Radio was not interfered: " + intfRadio);*/
           intfRadio.interfereAnyReception();
         }

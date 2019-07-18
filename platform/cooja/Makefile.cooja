@@ -49,12 +49,12 @@ vpath %.c $(COOJA_SOURCEDIRS)
 
 COOJA_BASE	= simEnvChange.c cooja_mt.c cooja_mtarch.c rtimer-arch.c slip.c watchdog.c rimestats.c elfloader-x86.c
 
-COOJA_INTFS	= beep.c button-sensor.c ip.c leds-arch.c moteid.c \
+COOJA_INTFS	= beep.c button-sensor.c ip.c leds-arch.c dir-arch.c moteid.c \
 		    pir-sensor.c rs232.c vib-sensor.c \
 		    clock.c log.c cfs-cooja.c cooja-radio.c \
 			eeprom.c slip-arch.c
 
-COOJA_CORE = random.c sensors.c leds.c symbols.c
+COOJA_CORE = random.c sensors.c leds.c dir.c symbols.c
 
 COOJA_NET = uip-driver.c
 
@@ -86,7 +86,7 @@ endif
 
 ifeq ($(CONTIKI_WITH_RIME),1)
   HAS_STACK = 1
-  CFLAGS += -DNETSTACK_CONF_WITH_RIME=1 
+  CFLAGS += -DNETSTACK_CONF_WITH_RIME=1
 endif
 
 # Make IPv6 the default stack
